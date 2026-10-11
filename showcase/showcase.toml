@@ -1,0 +1,11 @@
+[[media]]
+file = "warhead.json.gz"
+name = "Armor breaks. Fragments scatter."
+
+[[media]]
+file = "hunt.json.gz"
+name = "A saucer joins the fight"
+
+[[media]]
+file = "title.png"
+name = "Shatter — Warhead"

@@ -1,109 +1,126 @@
-// Shatter — the game. THIS IS THE FILE YOU IMPLEMENT.
-//
-// `src/main.ts`, `src/constants.ts` and the project's configuration are supplied
-// with the project and stay as they are. What is missing is the game: the state
-// it holds, the debug surface that poses and reads that state, and the three
-// functions below.
-//
-// FIRST, DECLARE AND EXPORT `ShatterState`, exactly as `specs/state.md` fixes it,
-// and `ShatterDebugApi`, the debug and automation surface
-// `specs/instrumentation.md` specifies. The stub below is written against both
-// names, so this project does not compile until they exist — the type check
-// failing on a freshly seeded workspace is the starting point, not a broken seed.
-//
-// THEN IMPLEMENT the three functions. `initialize` runs once, when the engine is
-// initialized, and returns the state and the debug surface together, as the pair
-// `[state, debug]`. `update` and `render` then run once each per frame — `update`
-// first, with the frame's delta time in SECONDS, then `render`.
-//
-// The state is a VALUE, and every frame is a transition over it. The engine hands
-// `update` the current state as a read-only view (`DeepReadonly<ShatterState>`)
-// and stores whatever `update` returns as the next state; `render` is handed that
-// next state, as the same read-only view, and returns nothing. Nothing ever holds
-// a writable `ShatterState`: `update` builds the next state from the current one
-// (spread the parts that change, `map` over the arrays) rather than assigning into
-// it, and a frame that returns `undefined` is refused by the engine. The engine's
-// own documentation, seeded at `engine/`, defines all of this and the scoped APIs
-// each function receives; read it before you start.
-//
-// The engine hands the frame its real elapsed seconds and mandates no timestep of
-// its own, while `specs/simulation.md` fixes Shatter's at TICK_HZ. Accumulate the
-// delta in the state and run whole ticks while the accumulator holds one, carrying
-// the remainder.
-//
-// The engine returns the surface from `engine.debug`, exactly as `initialize`
-// handed it over, which is how the game is driven from code
-// (`specs/instrumentation.md`). Because no one holds a writable state, the surface
-// is written in the shape of `update`: a pose takes the current state and returns
-// the next (`setShipPosition(state, x, y)`), a reading takes the state and returns
-// what it read (`snapshot(state)`), and a caller drives them through
-// `engine.apply` and `engine.state`. Where its implementation lives under `src/`
-// is your call; the only fixed point is that `initialize` returns it.
+import type { Game } from "@clockwyrks/simple-2d";
+import type { RockSize } from "./constants";
+import { initialize, update } from "./runtime";
+import { render } from "./render";
+import type { debug } from "./debug";
+export const BACKGROUND = "#080e19";
+export interface Point {
+  readonly x: number;
+  readonly y: number;
+}
+export interface Particle extends Point {
+  readonly vx: number;
+  readonly vy: number;
+  readonly life: number;
+  readonly color: string;
+}
+export type Screen = "title" | "howto" | "playing" | "paused" | "gameover";
+export type SaucerEdge = "left" | "right";
+export type FieldEdge = "top" | "bottom" | "left" | "right";
 
-import type {
-  Game,
-  InitApi,
-  RenderApi,
-  UpdateApi,
-} from "@clockwyrks/simple-2d";
-import type { DeepReadonly } from "ts-essentials";
+export interface ShipState {
+  readonly x: number;
+  readonly y: number;
+  readonly vx: number;
+  readonly vy: number;
+  readonly angle: number;
+  readonly thrusting: boolean;
+  readonly invuln: number;
+  readonly collision: boolean;
+  readonly fireCooldown: number;
+}
 
-/**
- * The field background, a CSS color string. `src/main.ts` hands it to the engine
- * as the color the canvas is cleared to each frame, so the letterbox bars around
- * the field match the field itself. This placeholder is replaced by the build
- * with the color its own field uses.
- */
-export const BACKGROUND = "#000";
+export interface BulletState {
+  readonly id: number;
+  readonly x: number;
+  readonly y: number;
+  readonly vx: number;
+  readonly vy: number;
+  readonly life: number;
+}
 
-const NOT_IMPLEMENTED = "Shatter: src/game.ts is not implemented yet";
+export interface RockState {
+  readonly id: number;
+  readonly x: number;
+  readonly y: number;
+  readonly vx: number;
+  readonly vy: number;
+  readonly size: RockSize;
+  readonly spin: number;
+  readonly health: number;
+  readonly flash: number;
+}
 
-/**
- * The game this build's engine drives.
- *
- * Implement all three functions. Nothing else in the project needs changing for
- * the game to run: `src/main.ts` already binds this object to the engine.
- */
+export interface SaucerState {
+  readonly id: number;
+  readonly x: number;
+  readonly y: number;
+  readonly vx: number;
+  readonly vy: number;
+  readonly mind: boolean;
+  readonly gun: boolean;
+  readonly travel: boolean;
+  readonly weave: 1 | -1;
+  readonly fireClock: number;
+  readonly weaveClock: number;
+  readonly age: number;
+}
+
+export interface TorpedoState {
+  readonly id: number;
+  readonly x: number;
+  readonly y: number;
+  readonly vx: number;
+  readonly vy: number;
+  readonly heading: number;
+  readonly life: number;
+  readonly homing: boolean;
+}
+
+export interface ShatterState {
+  readonly screen: Screen;
+  readonly menuIndex: number;
+
+  readonly score: number;
+  readonly lives: number;
+  readonly wave: number;
+  readonly waveBanner: number;
+
+  readonly ship: ShipState;
+  readonly bullets: readonly BulletState[];
+  readonly rocks: readonly RockState[];
+  readonly saucer: SaucerState | null;
+  readonly enemyBullets: readonly BulletState[];
+  readonly torpedoes: readonly TorpedoState[];
+  readonly torpedoCharge: number;
+
+  readonly waveSpawning: boolean;
+  readonly saucerSpawning: boolean;
+  readonly saucerClock: number;
+  readonly saucerDue: number;
+
+  readonly nextSaucerEdge: SaucerEdge | null;
+  readonly nextSaucerRow: number | null;
+  readonly nextSaucerAim: number | null;
+  readonly nextRockSpeed: number | null;
+  readonly nextRecycleEdge: FieldEdge | null;
+
+  readonly tickClock: number;
+  readonly nextId: number;
+  readonly simTime: number;
+  readonly muted: boolean;
+  readonly trails: Readonly<Record<number, readonly Point[]>>;
+  readonly particles: readonly Particle[];
+  readonly extraLifeBanner: number;
+  readonly fieldTime: number;
+  readonly pointerStarts: Readonly<Record<number, number>>;
+  readonly pendingFire: boolean;
+  readonly pendingTorpedo: boolean;
+}
+
+export type ShatterDebugApi = typeof debug;
 export const game: Game<ShatterState, ShatterDebugApi> = {
-  /**
-   * Runs once, before any frame.
-   *
-   * Register every action in ACTIONS against its BINDINGS, define the six CUES,
-   * register the diagnostic sources specs/instrumentation.md lists — each is
-   * handed the state current at the read, so none closes over the state built
-   * here — and build the complete initial state: the title screen, with every
-   * field of ShatterState set. Return it beside the debug surface.
-   */
-  initialize(_api: InitApi<ShatterState>): [ShatterState, ShatterDebugApi] {
-    throw new Error(NOT_IMPLEMENTED);
-  },
-
-  /**
-   * Runs once per frame, before `render`: the next state, from the current one.
-   *
-   * `dt` is the real elapsed SECONDS of this frame. Read input, accumulate it
-   * against Shatter's own fixed timestep and advance the simulation in whole
-   * ticks, play cues, and mirror the engine's mute bit into the returned state's
-   * `muted`. The value returned is what `render` draws and what the next `update`
-   * receives; `state` itself is read-only and stays as it was.
-   */
-  update(
-    _state: DeepReadonly<ShatterState>,
-    _api: UpdateApi,
-    _dt: number,
-  ): ShatterState {
-    throw new Error(NOT_IMPLEMENTED);
-  },
-
-  /**
-   * Runs once per frame, after `update`, with the state `update` returned.
-   *
-   * `api.ctx` arrives cleared and already carrying the logical transform, so draw
-   * in 1280x720 coordinates and never read the canvas element's size. The state
-   * arrives read-only, so the type is what guarantees that rendering changes
-   * nothing.
-   */
-  render(_state: DeepReadonly<ShatterState>, _api: RenderApi): void {
-    throw new Error(NOT_IMPLEMENTED);
-  },
+  initialize,
+  update,
+  render,
 };
